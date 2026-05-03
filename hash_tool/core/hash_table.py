@@ -111,10 +111,11 @@ class DoubleHashingHashTable(HashTableBase):
         return None
 
 # test nhanh
-ht = LinearProbingHashTable(size=7)
-ht.insert("alice", 1)
-ht.insert("bob", 2)
-ht.insert("carol", 3)
-print(ht.table)           # thấy được slot nào bị chiếm
-print(ht.load_factor)     # ~0.43
-print(ht.search("bob"))   # 2
+if __name__ == "__main__":
+    ht = LinearProbingHashTable(size=7)
+    ht.insert("alice", 1)
+    ht.insert("bob", 2)
+    ht.insert("carol", 3)
+    print(ht.table)           # thấy được slot nào bị chiếm
+    print(ht.load_factor)     # ~0.43
+    print(ht.search("bob"))   # 2
