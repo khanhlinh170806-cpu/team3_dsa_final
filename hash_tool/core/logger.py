@@ -1,161 +1,92 @@
-# logger.py
-from dataclasses import dataclass
-from hash_table import LinearProbingHashTable
+from dataclasses import dataclass, field
+from typing import List, Optional
 
-
-# =====================================================
-# 1. ProbeEvent dataclass
-# =====================================================
 @dataclass
 class ProbeEvent:
-    key: object
-    h1: int
-    probe_path: list
-    steps: int
+    operation: str          # "insert" | "search" | "delete"
+    key: str
+    h1: int                 # hash ban đầu
+    probe_path: List[int]   # danh sách slot đã thăm theo thứ tự
+    final_slot: Optional[int]  # slot cuối cùng (None nếu không tìm thấy)
     is_collision: bool
+    steps: int              # = len(probe_path)
 
-
-# =====================================================
-# 2. LoggedHashTable wrapper
-# =====================================================
 class LoggedHashTable:
-    def __init__(self, table):
-        """
-        table = object từ core engine:
-            ChainingHashTable(...)
-            LinearProbingHashTable(...)
-            DoubleHashingHashTable(...)
-        """
-        self.table = table
-        self.events = []
+    """Wrapper: bọc ngoài bất kỳ HashTableBase nào, ghi lại events"""
+    
+    def __init__(self, strategy_class, size=11):
+        self._ht = strategy_class(size)
+        self.events: List[ProbeEvent] = []
+        self.collision_count = 0
 
-    # -------------------------------------------------
-    # INSERT + LOG
-    # -------------------------------------------------
-    def insert(self, key, value):
-        path = self._compute_probe_path(key)
+    @property
+    def table(self):
+        return self._ht.table
 
-        event = ProbeEvent(
-            key=key,
-            h1=path[0],
-            probe_path=path,
-            steps=len(path),
-            is_collision=len(path) > 1
-        )
-
-        self.events.append(event)
-
-        self.table.insert(key, value)
-
-    # -------------------------------------------------
-    # Wrapper methods
-    # -------------------------------------------------
-    def search(self, key):
-        return self.table.search(key)
-
-    def delete(self, key):
-        return self.table.delete(key)
+    @property
+    def size(self):
+        return self._ht.size
 
     @property
     def load_factor(self):
-        return self.table.load_factor
+        return self._ht.load_factor
 
-    # =================================================
-    # 3. _compute_probe_path()
-    # =================================================
+    def insert(self, key, value):
+        h1 = self._ht.hash1(key)
+        probe_path = self._compute_probe_path(key)
+        is_col = len(probe_path) > 1
+
+        if is_col:
+            self.collision_count += 1
+
+        self._ht.insert(key, value)
+        
+        event = ProbeEvent(
+            operation="insert", key=str(key), h1=h1,
+            probe_path=probe_path,
+            final_slot=probe_path[-1] if probe_path else h1,
+            is_collision=is_col,
+            steps=len(probe_path)
+        )
+        self.events.append(event)
+        return event
+
     def _compute_probe_path(self, key):
-
-        # -----------------------------
-        # ChainingHashTable
-        # -----------------------------
-        if self.table.__class__.__name__ == "ChainingHashTable":
-            return [self.table.hash1(key)]
-
-        # -----------------------------
-        # LinearProbingHashTable
-        # -----------------------------
-        elif self.table.__class__.__name__ == "LinearProbingHashTable":
-            idx = self.table.hash1(key)
-            path = []
-
-            for i in range(self.table.size):
-                slot = (idx + i) % self.table.size
+        """Tính probe path TRƯỚC khi thực sự insert — để record đúng"""
+        h1 = self._ht.hash1(key)
+        path = []
+        
+        # Chaining: chỉ 1 slot
+        from core.hash_table import ChainingHashTable
+        if isinstance(self._ht, ChainingHashTable):
+            return [h1]
+        
+        # Open addressing: trace từng bước
+        from core.hash_table import DoubleHashingHashTable
+        if isinstance(self._ht, DoubleHashingHashTable):
+            h2 = self._ht.hash2(key)
+            for i in range(self._ht.size):
+                slot = (h1 + i * h2) % self._ht.size
                 path.append(slot)
-
-                if (
-                    self.table.table[slot] is None or
-                    self.table.table[slot] is self.table.DELETED
-                ):
+                if self._ht.table[slot] is None or \
+                   (hasattr(self._ht, 'DELETED') and self._ht.table[slot] is self._ht.DELETED):
                     break
-
-            return path
-
-        # -----------------------------
-        # DoubleHashingHashTable
-        # -----------------------------
-        elif self.table.__class__.__name__ == "DoubleHashingHashTable":
-            h1 = self.table.hash1(key)
-            h2 = self.table.hash2(key)
-
-            path = []
-
-            for i in range(self.table.size):
-                slot = (h1 + i * h2) % self.table.size
+        else:  # Linear / Quadratic
+            for i in range(self._ht.size):
+                slot = (h1 + i) % self._ht.size
                 path.append(slot)
-
-                if self.table.table[slot] is None:
+                if self._ht.table[slot] is None or \
+                   (hasattr(self._ht, 'DELETED') and self._ht.table[slot] is self._ht.DELETED):
                     break
+        return path
 
-            return path
-
-        # fallback
-        else:
-            return [self.table.hash1(key)]
-
-    # =================================================
-    # 4. get_stats()
-    # =================================================
     def get_stats(self):
-        total = len(self.events)
-
-        collisions = sum(1 for e in self.events if e.is_collision)
-
-        avg_probe = (
-            sum(e.steps for e in self.events) / total
-            if total > 0 else 0
-        )
-
-        max_probe = (
-            max(e.steps for e in self.events)
-            if total > 0 else 0
-        )
-
         return {
-            "total_inserts": total,
-            "collisions": collisions,
-            "collision_rate": round(collisions / total, 2) if total else 0,
-            "avg_probe_length": round(avg_probe, 2),
-            "max_probe_length": max_probe,
-            "load_factor": round(self.table.load_factor, 2),
-            "items": self.table.n,
-            "table_size": self.table.size
+            "load_factor": round(self.load_factor, 3),
+            "collision_count": self.collision_count,
+            "total_ops": len(self.events),
+            "avg_probe_len": round(
+                sum(e.steps for e in self.events) / len(self.events), 2
+            ) if self.events else 0
         }
-
-
-# =====================================================
-# 5. TEST
-# =====================================================
-if __name__ == "__main__":
-    ht = LoggedHashTable(LinearProbingHashTable(size=11))
-
-    keys = [10, 21, 32, 43, 54, 65, 76, 87, 98, 109]
-
-    for k in keys:
-        ht.insert(k, f"value_{k}")
-
-    print("===== EVENTS =====")
-    for e in ht.events:
-        print(e)
-
-    print("\n===== STATS =====")
-    print(ht.get_stats())
+        
