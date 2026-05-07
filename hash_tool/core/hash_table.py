@@ -80,7 +80,42 @@ class LinearProbingHashTable(HashTableBase):
                 self.n -= 1
                 return
 
+class QuadraticProbingHashTable(HashTableBase):
+    DELETED = object()
 
+    def insert(self, key, value):
+        h1 = self.hash1(key)
+        for i in range(self.size):
+            slot = (h1 + i * i) % self.size  # i^2
+            if self.table[slot] is None or self.table[slot] is self.DELETED:
+                self.table[slot] = (key, value)
+                self.n += 1
+                return
+            if self.table[slot][0] == key:
+                self.table[slot] = (key, value)
+                return
+        raise Exception("Table is full")
+
+    def search(self, key):
+        h1 = self.hash1(key)
+        for i in range(self.size):
+            slot = (h1 + i * i) % self.size
+            if self.table[slot] is None:
+                return None
+            if self.table[slot] is not self.DELETED and self.table[slot][0] == key:
+                return self.table[slot][1]
+        return None
+
+    def delete(self, key):
+        h1 = self.hash1(key)
+        for i in range(self.size):
+            slot = (h1 + i * i) % self.size
+            if self.table[slot] is None:
+                return
+            if self.table[slot] is not self.DELETED and self.table[slot][0] == key:
+                self.table[slot] = self.DELETED
+                self.n -= 1
+                return
 class DoubleHashingHashTable(HashTableBase):
     def hash2(self, key):
         # hash2 phải trả về số lẻ để đảm bảo probe hết mọi slot

@@ -1,19 +1,20 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 @dataclass
 class ProbeEvent:
-    operation: str          # "insert" | "search" | "delete"
+    operation: str
     key: str
-    h1: int                 # hash ban đầu
-    probe_path: List[int]   # danh sách slot đã thăm theo thứ tự
-    final_slot: Optional[int]  # slot cuối cùng (None nếu không tìm thấy)
+    h1: int
+    probe_path: List[int]
+    final_slot: Optional[int]
     is_collision: bool
-    steps: int              # = len(probe_path)
+    steps: int
+
 
 class LoggedHashTable:
     """Wrapper: bọc ngoài bất kỳ HashTableBase nào, ghi lại events"""
-    
+
     def __init__(self, strategy_class, size=11):
         self._ht = strategy_class(size)
         self.events: List[ProbeEvent] = []
@@ -40,7 +41,7 @@ class LoggedHashTable:
             self.collision_count += 1
 
         self._ht.insert(key, value)
-        
+
         event = ProbeEvent(
             operation="insert", key=str(key), h1=h1,
             probe_path=probe_path,
@@ -52,32 +53,44 @@ class LoggedHashTable:
         return event
 
     def _compute_probe_path(self, key):
-        """Tính probe path TRƯỚC khi thực sự insert — để record đúng"""
+        from core.hash_table import (
+            ChainingHashTable,
+            LinearProbingHashTable,
+            QuadraticProbingHashTable,
+            DoubleHashingHashTable
+        )
+
         h1 = self._ht.hash1(key)
         path = []
-        
-        # Chaining: chỉ 1 slot
-        from core.hash_table import ChainingHashTable
+
         if isinstance(self._ht, ChainingHashTable):
             return [h1]
-        
-        # Open addressing: trace từng bước
-        from core.hash_table import DoubleHashingHashTable
-        if isinstance(self._ht, DoubleHashingHashTable):
+
+        elif isinstance(self._ht, DoubleHashingHashTable):
             h2 = self._ht.hash2(key)
             for i in range(self._ht.size):
                 slot = (h1 + i * h2) % self._ht.size
                 path.append(slot)
                 if self._ht.table[slot] is None or \
-                   (hasattr(self._ht, 'DELETED') and self._ht.table[slot] is self._ht.DELETED):
+                   self._ht.table[slot] is self._ht.DELETED:
                     break
-        else:  # Linear / Quadratic
+
+        elif isinstance(self._ht, QuadraticProbingHashTable):
+            for i in range(self._ht.size):
+                slot = (h1 + i * i) % self._ht.size
+                path.append(slot)
+                if self._ht.table[slot] is None or \
+                   self._ht.table[slot] is self._ht.DELETED:
+                    break
+
+        else:  # Linear Probing
             for i in range(self._ht.size):
                 slot = (h1 + i) % self._ht.size
                 path.append(slot)
                 if self._ht.table[slot] is None or \
-                   (hasattr(self._ht, 'DELETED') and self._ht.table[slot] is self._ht.DELETED):
+                   self._ht.table[slot] is self._ht.DELETED:
                     break
+
         return path
 
     def get_stats(self):
@@ -89,4 +102,3 @@ class LoggedHashTable:
                 sum(e.steps for e in self.events) / len(self.events), 2
             ) if self.events else 0
         }
-        
