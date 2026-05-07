@@ -2,10 +2,13 @@ class HashTableBase:
     def __init__(self, size=11):
         self.size = size
         self.table = [None] * size
-        self.n = 0  # số phần tử hiện tại
+        self.n = 0
 
     def hash1(self, key):
-        return hash(key) % self.size
+        try:
+            return int(key) % self.size        # ✅ fix: int key dùng giá trị số
+        except (ValueError, TypeError):
+            return hash(key) % self.size        # string key dùng hash()
 
     @property
     def load_factor(self):
@@ -19,7 +22,7 @@ class HashTableBase:
 class ChainingHashTable(HashTableBase):
     def __init__(self, size=11):
         super().__init__(size)
-        self.table = [[] for _ in range(size)]  # mỗi slot là 1 list
+        self.table = [[] for _ in range(size)]
 
     def insert(self, key, value):
         idx = self.hash1(key)
@@ -44,7 +47,7 @@ class ChainingHashTable(HashTableBase):
 
 
 class LinearProbingHashTable(HashTableBase):
-    DELETED = object()  # sentinel cho deleted slot
+    DELETED = object()
 
     def insert(self, key, value):
         idx = self.hash1(key)
@@ -79,6 +82,7 @@ class LinearProbingHashTable(HashTableBase):
                 self.table[slot] = self.DELETED
                 self.n -= 1
                 return
+
 
 class QuadraticProbingHashTable(HashTableBase):
     DELETED = object()
@@ -86,7 +90,7 @@ class QuadraticProbingHashTable(HashTableBase):
     def insert(self, key, value):
         h1 = self.hash1(key)
         for i in range(self.size):
-            slot = (h1 + i * i) % self.size  # i^2
+            slot = (h1 + i * i) % self.size
             if self.table[slot] is None or self.table[slot] is self.DELETED:
                 self.table[slot] = (key, value)
                 self.n += 1
@@ -116,10 +120,14 @@ class QuadraticProbingHashTable(HashTableBase):
                 self.table[slot] = self.DELETED
                 self.n -= 1
                 return
+
+
 class DoubleHashingHashTable(HashTableBase):
     def hash2(self, key):
-        # hash2 phải trả về số lẻ để đảm bảo probe hết mọi slot
-        return 7 - (hash(key) % 7)
+        try:
+            return 7 - (int(key) % 7)          # ✅ fix: int key dùng giá trị số
+        except (ValueError, TypeError):
+            return 7 - (hash(key) % 7)
 
     def insert(self, key, value):
         h1 = self.hash1(key)
@@ -145,12 +153,17 @@ class DoubleHashingHashTable(HashTableBase):
                 return self.table[slot][1]
         return None
 
+
 # test nhanh
 if __name__ == "__main__":
-    ht = LinearProbingHashTable(size=7)
+    ht = LinearProbingHashTable(size=11)
+    print(ht.hash1("29"))   # phải ra 7
+    print(ht.hash1(29))     # phải ra 7
+    print(ht.hash1("abc"))  # ra số tùy hash, không lỗi
+
     ht.insert("alice", 1)
     ht.insert("bob", 2)
     ht.insert("carol", 3)
-    print(ht.table)           # thấy được slot nào bị chiếm
-    print(ht.load_factor)     # ~0.43
-    print(ht.search("bob"))   # 2
+    print(ht.table)
+    print(ht.load_factor)
+    print(ht.search("bob"))

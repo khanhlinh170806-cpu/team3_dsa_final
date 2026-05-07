@@ -1,91 +1,77 @@
 import streamlit as st
 
+def render_formula_breakdown(event, strategy: str, table_size: int):
+    st.markdown("#### 🔢 Công thức từng bước")
 
-def render_probe_path(event):
-    """
-    Render the probe path of the last insert as step-by-step colored boxes.
-    event: ProbeEvent from logger.py
-    """
-    if event is None:
+    st.markdown("**① Hash ban đầu:**")
+
+    # ✅ fix: detect int key để hiện công thức đúng
+    try:
+        int(event.key)
+        h1_formula = f"{event.key} % {table_size}  =  {event.h1}"
+    except (ValueError, TypeError):
+        h1_formula = f'hash("{event.key}") % {table_size}  =  {event.h1}'
+
+    st.code(h1_formula, language="")
+
+    if len(event.probe_path) == 1:
+        st.success(f"Slot [{event.h1}] trống → insert thẳng, không collision.")
         return
 
-    st.markdown("#### Probe Path")
+    st.markdown("**② Probe sequence (slot bị chiếm → tìm slot tiếp):**")
 
-    path  = event.probe_path
-    final = event.final_slot
-    h1    = event.h1
+    # ✅ fix: detect int key cho h2
+    h2 = None
+    if strategy == "Double Hashing":
+        try:
+            int(event.key)
+            h2 = 7 - (int(event.key) % 7)
+            st.code(f"h2({event.key}) = 7 - ({event.key} % 7)  =  {h2}", language="")
+        except (ValueError, TypeError):
+            h2 = 7 - (hash(event.key) % 7)
+            st.code(f'h2("{event.key}") = 7 - (hash("{event.key}") % 7)  =  {h2}', language="")
 
-    # Hash formula header
+    rows = []
+    for i, slot in enumerate(event.probe_path):
+        is_final = (slot == event.final_slot)
+        status = "✅ trống → INSERT" if is_final else "❌ occupied"
+
+        if strategy == "Linear Probing":
+            formula = f"({event.h1} + {i}) % {table_size}  =  {slot}"
+        elif strategy == "Quadratic Probing":
+            formula = f"({event.h1} + {i}²) % {table_size}  =  ({event.h1} + {i*i}) % {table_size}  =  {slot}"
+        elif strategy == "Double Hashing":
+            formula = f"({event.h1} + {i} × {h2}) % {table_size}  =  {slot}"
+        else:  # Chaining
+            formula = f"hash → bucket [{slot}]"
+
+        rows.append(f"  i={i}:  {formula}   {status}")
+
+    st.code("\n".join(rows), language="")
+
+
+def render_probe_arrow(event):
+    steps = []
+    for i, slot in enumerate(event.probe_path):
+        is_final = (slot == event.final_slot)
+        if is_final:
+            steps.append(
+                f"<span style='background:#5DCAA5;color:white;padding:3px 10px;"
+                f"border-radius:6px;font-weight:bold'>[{slot}] ✓</span>"
+            )
+        elif i == 0:
+            steps.append(
+                f"<span style='background:#F09595;color:white;padding:3px 10px;"
+                f"border-radius:6px'>[{slot}] collision</span>"
+            )
+        else:
+            steps.append(
+                f"<span style='background:#FAC775;color:#333;padding:3px 10px;"
+                f"border-radius:6px'>[{slot}] full</span>"
+            )
+
+    arrow = " &nbsp;→&nbsp; "
     st.markdown(
-        f"<div style='font-family:monospace; font-size:14px; margin-bottom:10px'>"
-        f"hash(<b>{event.key}</b>) = <b>{h1}</b>"
-        f"</div>",
-        unsafe_allow_html=True,
+        f"<div style='margin:8px 0;line-height:2.6'>{arrow.join(steps)}</div>",
+        unsafe_allow_html=True
     )
-
-    # Step boxes
-    cols = st.columns(len(path))
-    for i, (col, slot) in enumerate(zip(cols, path)):
-        with col:
-            is_final  = (slot == final)
-            is_start  = (i == 0)
-
-            if is_final and len(path) == 1:
-                bg, label, icon, text_color = "#5DCAA5", "inserted", "✓", "#fff"
-            elif is_final:
-                bg, label, icon, text_color = "#5DCAA5", "inserted", "✓", "#fff"
-            elif is_start:
-                bg, label, icon, text_color = "#F09595", "collision", "✗", "#fff"
-            else:
-                bg, label, icon, text_color = "#FAC775", "skip", "→", "#5a3e00"
-
-            arrow_html = (
-                "<div style='text-align:center;font-size:18px;margin-top:6px'>→</div>"
-                if not is_final else ""
-            )
-
-            st.markdown(
-                f"""
-                <div style="
-                    background:{bg}; border-radius:8px; padding:10px 6px;
-                    text-align:center; color:{text_color};
-                    border:1px solid #ddd;
-                ">
-                    <div style="font-size:11px; opacity:0.85">step {i + 1}</div>
-                    <div style="font-size:20px; font-weight:bold">slot {slot}</div>
-                    <div style="font-size:11px; margin-top:4px">{icon} {label}</div>
-                </div>
-                {arrow_html}
-                """,
-                unsafe_allow_html=True,
-            )
-
-    # Result banner
-    st.markdown("<div style='margin-top:12px'>", unsafe_allow_html=True)
-    if event.is_collision:
-        st.warning(
-            f"⚠️ Collision detected! Key `{event.key}` required "
-            f"**{event.steps} steps** to find an empty slot "
-            f"(h1 = {h1} → final slot = {final})"
-        )
-    else:
-        st.success(
-            f"✅ No collision. Key `{event.key}` inserted directly at slot {final}."
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
-def render_probe_formula(strategy_name: str, key, h1: int, h2: int = None):
-    """
-    Display the probing formula currently being used.
-    """
-    st.markdown("**Probing formula:**")
-
-    formulas = {
-        "Chaining":          f"h(key) = hash({key}) mod m = {h1}  →  insert into chain at slot {h1}",
-        "Linear Probing":    f"(h + i) mod m  =  ({h1} + i) mod m     i = 0, 1, 2, ...",
-        "Quadratic Probing": f"(h + i²) mod m  =  ({h1} + i²) mod m   i = 0, 1, 2, ...",
-        "Double Hashing":    f"(h1 + i × h2) mod m\nh1 = {h1},  h2 = {h2}  →  ({h1} + i × {h2}) mod m",
-    }
-
-    st.code(formulas.get(strategy_name, "Unknown strategy"), language="")
