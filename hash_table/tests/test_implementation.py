@@ -11,15 +11,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pytest
 
 from hash_table.implementation import (
-    ChainingHashTable,
     LinearProbingHashTable,
     QuadraticProbingHashTable,
     DoubleHashingHashTable,
+    chaining,
 )
 
 # All four classes to parametrize tests across
 ALL_TABLES = [
-    ChainingHashTable,
+    chaining,
     LinearProbingHashTable,
     QuadraticProbingHashTable,
     DoubleHashingHashTable,
@@ -209,7 +209,7 @@ def test_tuple_keys(cls):
 # ===========================================================================
 
 def test_chaining_visualize():
-    ht = ChainingHashTable(capacity=8)
+    ht = chaining(capacity=8)
     ht.insert("a", 1)
     ht.insert("b", 2)
     out = ht.visualize()
@@ -217,7 +217,7 @@ def test_chaining_visualize():
 
 
 def test_chaining_keys_values_items():
-    ht = ChainingHashTable()
+    ht = chaining()
     ht["x"] = 10
     ht["y"] = 20
     assert set(ht.keys()) == {"x", "y"}

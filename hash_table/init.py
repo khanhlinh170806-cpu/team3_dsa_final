@@ -1,15 +1,15 @@
 """Hash Table package — DSA Final Project."""
 from .implementation import (
     BaseHashTable,
-    ChainingHashTable,
     LinearProbingHashTable,
     QuadraticProbingHashTable,
     DoubleHashingHashTable,
+    chaining,
 )
 
 __all__ = [
     "BaseHashTable",
-    "ChainingHashTable",
+    "chaining",
     "LinearProbingHashTable",
     "QuadraticProbingHashTable",
     "DoubleHashingHashTable",
