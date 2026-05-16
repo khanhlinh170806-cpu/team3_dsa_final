@@ -29,9 +29,37 @@ class DoubleHashingHashTable(BaseHashTable):
 
     Probe: (h1(key) + i * h2(key)) % capacity  for i = 0, 1, 2, …
     """
+
+    # ── Public sentinel — dùng bởi logger.py ──────────────────────────
+    DELETED = _DELETED
+
     # ------------------------------------------------------------------
-    # Hash Functions
+    # Constructor
     # ------------------------------------------------------------------
+
+    def __init__(self, capacity: int = 16, load_factor_threshold: float = 0.65):
+        super().__init__(capacity, load_factor_threshold)
+
+    # ------------------------------------------------------------------
+    # Public properties — logger.py cần truy cập qua tên public
+    # ------------------------------------------------------------------
+
+    @property
+    def table(self):
+        """Expose internal _table dưới tên public."""
+        return self._table
+
+    # ------------------------------------------------------------------
+    # Hash Functions (public alias để logger.py gọi được)
+    # ------------------------------------------------------------------
+
+    def hash1(self, key) -> int:
+        """Public alias của _hash1 — dùng bởi LoggedHashTable."""
+        return self._hash1(key)
+
+    def hash2(self, key) -> int:
+        """Public alias của _hash2 — dùng bởi LoggedHashTable."""
+        return self._hash2(key)
 
     def _hash1(self, key) -> int:
         return hash(key) % self.capacity
@@ -39,19 +67,12 @@ class DoubleHashingHashTable(BaseHashTable):
     def _hash2(self, key) -> int:
         """
         Hàm băm thứ hai quyết định 'bước nhảy' (step size).
-        Để đảm bảo duyệt hết bảng khi capacity là lũy thừa của 2, 
+        Để đảm bảo duyệt hết bảng khi capacity là lũy thừa của 2,
         bước nhảy PHẢI là số lẻ.
         """
-        # Lấy một giá trị băm từ key
         h = hash(key)
-        
-        # Công thức: (giá trị % một số nhỏ hơn capacity)
-        # Sau đó đảm bảo kết quả là số lẻ bằng cách dùng | 1 (bit OR với 1)
-        # Cách này nhanh và đảm bảo step >= 1 và luôn lẻ.
         step = (h % (self.capacity - 1))
         return (step if step > 0 else 1) | 1
-    def __init__(self, capacity: int = 16, load_factor_threshold: float = 0.65):
-        super().__init__(capacity, load_factor_threshold)
 
     # ------------------------------------------------------------------
     # Probe helper
@@ -60,7 +81,7 @@ class DoubleHashingHashTable(BaseHashTable):
     def _probe(self, key):
         """
         Yield slot indices using double hashing probe order.
-        h2(key) is non-zero by construction (prime mod).
+        h2(key) is non-zero by construction.
         """
         h1 = self._hash1(key)
         h2 = self._hash2(key)
